@@ -1,0 +1,214 @@
+---
+title: "DATA 2401 R Final Project - Formula One (F1) Analysis"
+author: "Jake Zhu"
+date: "12/09/2019"
+output: 
+  html_document
+---
+
+<center><img src="https://i.pinimg.com/originals/d3/0b/af/d30bafbbeb9020fcf5efd1ae08d56c7f.jpg"></center>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+
+```{r}
+#loading in packages
+library(tidyverse) # Used for data visualization and wrangling
+library(dplyr) # Used for data wrangling
+library(ggplot2) #Used for data visualization
+library(ggthemes) # Extra themes to make ggplot graphs nicer, although I wanted to use theme_fivethirtyeight, it was not cooperating with my axis labels
+library(tidyr) # Used for data wrangling
+library(magrittr) # Used for data wrangling
+```
+
+# Introduction
+
+From the onset of motor sports, Formula One (F1) has been a mainstay to worldwide audiences since its inaugural season in 1950. Furthermore, with hundreds of millions of dollars in sponsorship money from global sponsors, F1 has flourished into an industry with business opportunities. Although data analysis is utilized in improving technology for modern constructors (teams), much of the data is private and highly secretive as teams’ attempt to surprass their competition each year. Hence, this data analysis will use only what is public, track data and results over the past half decade to approach some of the most popular questions to both veteran and newer fans alike.
+
+Throughout the decades, we have seen extraordinary drivers’ careers mold into legendary status as well as great rivalries unfold on the tracks with fiery passion, namely Aryton Senna vs. Alain Prost, Sebastian Vettel vs. Mark Webber, and Damon Hill vs. Michael Schumacher. In this F1 analysis report, I will compare and contrast how technology has improved with time by observing qualifying lap times at the three subjectively fastest tracks (Monza, Silverstone, and Spa), and give my personal take on whether Formula One has gotten faster in terms of speed in the modern era (2006-2017).
+
+# Data Source
+Source of Data: https://www.kaggle.com/cjgdev/formula-1-race-data-19502017/data
+
+The data was compiled by Chris G., a control systems software engineer at Red Bull Racing (a current team within F1). His original source was from Chris Newell at http://ergast.com/mrd/ and compiled at the end of the 2017 competitive season. Chris G. sites his inspiration as "exciting insight into an industry enjoyed by hundreds of millions of viewers all over the world".
+
+# Data Preparation: Fastest Track Times
+
+In order to observe the fastest tracks, I would be interested in the variables of the fastest lap during qualifying(as it is under the optimal conditions: weather, temperature of track, lowest amount of fuel for lightest weight of the race cars, etc), the year it was set, and the progression of the track throughout the years.
+This would require me to observe data from qualifying.csv and joining it with races.csv by raceID (because only races.csv contained circuitID which was needed to observe the circuits we need), and then further joining circuits.csv into the new file to obtain the qualifying times of the respective tracks we want. Instead of doing this in one go, we can do this in two separate left joins as we should prevent confusion in the file and code.
+
+We are interested in 3 circuits: Monza (Italian Grand Prix), Spa (Belgian Grand Prix), and Silverstone (British Grand Prix). Unfortunately, I cannot think of a way to automate the selection for each and individual qualifying time within a year, so I had to input the qualifyingId into the filter manually. In order to create each data frame for all three circuits, we can reuse the code from the first circuit and apply them to the remaining two circuits for efficiency and to practice good programming habits.
+
+When importing the data from csv files, all the strings were imported as is but the numerics were converted to factors, so we must convert them back to numerics for us to perform graphing. Therefore, I converted the race years to numeric as well as converted the qualifying times to seconds. Upon further inspection of the data, there were two outliers which are explained in the analysis section. I wanted to include the outliers in my initial graph but did not want them in my linear model, so I made two dataframes, one to graph and one to create the linear model from. As previously mentioned, I could not produce a method to effectively filter through the years which I wanted from each unique qualifyingId assigned to each race, so I filtered them manually instead.
+
+When graphing the data, I separated the data into two groups by engine types to explain my observations. I also created two different linear models to illustrate the difference in engine types.
+
+## Summary of Data: Italian Grand Prix (Monza)
+Below is a preview, using the head() function, of my final data frame I used for my Italian Grand Prix graph. The information we wanted are the converted lap times (fastestLapTimeNum), year, and qualifyingId.
+
+
+```{r}
+# importing all needed data for the qualifying times and tracks
+qualifying <- read.csv("Data/qualifying.csv", sep=",", stringsAsFactors = FALSE)
+circuits <- read.csv("Data/circuits.csv", sep=",", stringsAsFactors = FALSE)
+races <- read.csv("Data/races.csv", sep=",", stringsAsFactors = FALSE)
+
+# convert year to numeric so later plot can be continuous
+races$year <- as.numeric(races$year)
+
+# convert time to numeric same reason as previous
+convertFastestLap<-function(x){
+    if(length(x)>0){
+        curMinute<-as.numeric(strsplit(x,":")[[1]][1])
+        curSecond<-as.numeric(strsplit(strsplit(x,":")[[1]][2],"\\.")[[1]][1])
+        return(curMinute*60 + curSecond)
+        }
+}
+
+# needed to suppress warning because I wanted to introduce NA by coercion through the loop to fill blank cells, otherwise, the warning message goes through an infinite loop
+suppressWarnings(qualifying$fastestLapTimeNum<-sapply(qualifying$q3, convertFastestLap))
+
+# combining qualifying.csv and races.csv by raceID
+qualWithRaces <- left_join(
+  qualifying %>% dplyr::select(qualifyId, raceId, q3, fastestLapTimeNum),
+  races %>% dplyr::select(raceId, year, circuitId),
+  by = 'raceId')
+
+# combining new qualifying with races dataframe with circuits to find the appropriate circuit we need and its respective times
+qualFinal <- left_join(
+  qualWithRaces,
+  circuits %>% dplyr::select(circuitId, location),
+  by = 'circuitId')
+
+# individually filtering the qualifyingID as mentioned in the text, circuitID 14 is Monza
+monzaQual <- qualFinal %>% dplyr::filter(year > 2000, circuitId == 14) %>% 
+  dplyr::filter(qualifyId %in% c("1051", "633", "269", "3226", "3638", "5926", "5252", "5684", "6148", "6524", "6966", "7380")) %>% arrange(year)
+
+# second dataframe to exclude raining conditions as those will alter linear model in the graph
+monzaQualNoRain <- qualFinal %>% dplyr::filter(year > 2000, circuitId == 14) %>% 
+  dplyr::filter(qualifyId %in% c("1051", "633", "3226", "3638", "5926", "5252", "5684", "6148", "6524", "6966")) %>% arrange(year)
+
+# preview of the final dataframe for the Italian Grand Prix
+monzaQual %>% head(5)
+
+# graphing the qualifying times with year on x axis and time on y axis
+# note: the main graph with plots is with rain times but the smooth lines I have excluded the rain times
+# note2: there are two differing subsets of no rain times for differing engine types
+ggplot(monzaQual, aes(x = year, y = fastestLapTimeNum)) + geom_point() + 
+  theme(plot.margin = unit(c(0.5,0,0.5,0.5), "cm")) +
+  labs(title = "Fastest Qualifying Time from 2006-2017", subtitle = "Italian Grand Prix: Autodromo Nazionale di Monza", y = "Qualifying Time (seconds)", x = "Year") +
+  scale_x_continuous(breaks=c(2006:2017)) + 
+  scale_y_continuous(breaks=c(80:100)) + 
+  geom_smooth(data = subset(monzaQualNoRain, year %in% c(2006:2013)), method = "lm", se = F, fullrange = FALSE, aes(colour="A")) +
+  geom_smooth(data = subset(monzaQualNoRain, year %in% c(2014:2016)), method = "lm", se = F, fullrange = FALSE, aes(colour="B")) +
+  scale_colour_manual(name="Engine Type", labels = c("2.4 litre V8", "1.6 litre V6 turbo"), values=c("blue", "red"))
+
+```
+
+# Data Analysis: Fastest Track Times (Italian Grand Prix: Monza)
+The data only contains fastest lap times for qualifying starting from 2006 because F1 changed formats in qualifying at the beginning of 2006 to a three-pod qualifying format. Each of the fastest drivers advance to the next stage of qualifying round and the top drivers are chosen from the last round in order to start the race. Furthermore, F1 changed its regulation for engine requirement at the beginning of the 2006 season to the 2.4 litre V8 engines until the end of the 2013 season. At the beginning of the 2014 season, teams were required to have 1.6 litre V6 turbo engines until 2021, where new regulations will be put in place.
+
+From our graph produced for the overall fastest track, Monza of the Italian Grand Prix, we can observe the following:
+
+1. In 2008 and 2017, these are much higher qualifying times than the rest. This can be explained by the presence of rain and weather changes during qualifying rounds. When F1 race in the rain, the race cars are much slower because drivers must be cautious of slippery conditions on the track as well as having tires that are designed for more grip and not speed to prevent spinning. With this in mind, we can effectively eliminate these two data points from our analysis as outliers.
+
+2. From 2006 to 2013, the linear model shows a very slight increase in qualifying times when the 2.4 litre V8 engines were used, although this could be explained by other difference in conditions outside of race control (tire compound changes, regulation changes, etc). Overall, this observation should be accurate without considering further components of the race, meaning the speed of qualifying during this time got marginally slower.
+
+3. From 2014 to 2016, the linear model shows a consistent and drastic decrease in times when the 1.6 litre V6 turbo engines were used. This shows when the newer engines were implemented, F1 cars qualified faster and consistently throughout the 3 years.
+
+## Summary of Data: Belgian Grand Prix (Spa)
+
+Using the same logic as before, below are both the data frame and the graph I made for the Belgian Grand Prix.
+Note that in 2006, there was not a Belgian Grand Prix due to reconstruction of the track. Therefore, the graph starts at 2007.
+
+```{r}
+# Because the logic for filtering each individual circuit is the same, we can reuse the code from the first track
+
+# individually filtering the qualifyingID as mentioned in the text, circuitID 13 is Spa
+spaQual <- qualFinal %>% dplyr::filter(year > 2000, circuitId == 13) %>% 
+  dplyr::filter(qualifyId %in% c("655", "249", "3206", "3614", "4800", "5228", "5662", "6126", "6504", "6945", "7360")) %>% arrange(year)
+
+# second dataframe to exclude raining conditions as those will alter linear model in the graph
+spaQualNoRain <- qualFinal %>% dplyr::filter(year > 2000, circuitId == 13) %>% 
+  dplyr::filter(qualifyId %in% c("655", "249", "3206", "3614", "4800", "5228", "6504", "6945", "7360")) %>% arrange(year)
+
+# preview of the final dataframe for the Belgian Grand Prix
+spaQual %>% head(5)
+
+# graphing the qualifying times with year on x axis and time on y axis
+# note: the main graph with plots is with rain times but the smooth lines I have excluded the rain times
+# note2: there are two differing subsets of no rain times for differing engine types
+ggplot(spaQual, aes(x = year, y = fastestLapTimeNum)) + geom_point() + 
+  theme(plot.margin = unit(c(0.5,0,0.5,0.5), "cm")) +
+  labs(title = "Fastest Qualifying Time from 2007-2017", subtitle = "Belgian Grand Prix: Circuit de Spa-Francorchamps", y = "Qualifying Time (seconds)", x = "Year") +
+  scale_x_continuous(breaks=c(2007:2017)) + 
+  scale_y_continuous(breaks=c(100:125)) + 
+  geom_smooth(data = subset(spaQualNoRain, year %in% c(2007:2012)), method = "lm", se = F, fullrange = FALSE, aes(colour="A")) +
+  geom_smooth(data = subset(spaQualNoRain, year %in% c(2015:2017)), method = "lm", se = F, fullrange = FALSE, aes(colour="B")) +
+  scale_colour_manual(name="Engine Type", labels = c("2.4 litre V8", "1.6 litre V6 turbo"), values=c("blue", "red"))
+```
+
+# Data Analysis: Fastest Track Times (Belgian Grand Prix: Spa)
+
+From our graph produced for the Belgian Grand Prix, we can observe the following:
+
+1. Similar to Italy, the qualifying rounds with rain were shown to be outliers, so they were exluded in our linear model.
+
+2. During the 2.4 litre V8 engine era (2007-2012), there is a miniscule bump in qualifying times. We can conclude that qualifying times were stagnant and not increasing nor decreasing during this time. Hence, overall qualifying speed was about the same.
+
+3. During the 1.6 litre V6 turbo era (2015-2017), there is a huge decrease in time similar to the Italian Grand Prix modeled previously. This can answer out question that in this current era, qualifying times are decreasing and race cars are improving in terms of speed.
+
+## Summary of Data: British Grand Prix (Silverstone)
+
+Using the same logic as before, below are both the data frame (partial using head() function) and the graph I made for the British Grand Prix.
+
+```{r}
+# Because the logic for filtering each individual circuit is the same, we can reuse the code from the first track
+
+# individually filtering the qualifyingID as mentioned in the text, circuitID 9 is Spa
+silverstoneQual <- qualFinal %>% dplyr::filter(year > 2000, circuitId == 9) %>% 
+  dplyr::filter(qualifyId %in% c("897", "545", "169", "3126", "3542", "4728", "5156", "5596", "6060", "6464", "6880", "7320")) %>% arrange(year)
+
+# second dataframe to exclude raining conditions as those will alter linear model in the graph
+silverstoneQualNoRain <- qualFinal %>% dplyr::filter(year > 2000, circuitId == 9) %>% 
+  dplyr::filter(qualifyId %in% c("897", "545", "169", "3126", "3542", "4728", "5156", "5596", "6060", "6464", "6880", "7320")) %>% arrange(year)
+
+# preview of the final dataframe for the Belgian Grand Prix
+silverstoneQual %>% head(5)
+
+# graphing the qualifying times with year on x axis and time on y axis
+# note: the main graph with plots is with rain times but the smooth lines I have excluded the rain times
+# note2: there are two differing subsets of no rain times for differing engine types
+# note3: there is a third subset because of the track layout change from 2010 onward
+ggplot(silverstoneQual, aes(x = year, y = fastestLapTimeNum)) + geom_point() + 
+  theme(plot.margin = unit(c(0.25,0,0.25,0.5), "cm")) +
+  labs(title = "Fastest Qualifying Time from 2007-2017", subtitle = "British Grand Prix: Silverstone Circuit", y = "Qualifying Time (seconds)", x = "Year") +
+  scale_x_continuous(breaks=c(2006:2017)) + 
+  scale_y_continuous(breaks=c(79:111)) + 
+  geom_smooth(data = subset(silverstoneQualNoRain, year %in% c(2006:2009)), method = "lm", se = F, fullrange = FALSE, aes(colour="A")) +
+  geom_smooth(data = subset(silverstoneQualNoRain, year %in% c(2010:2011, 2013)), method = "lm", se = F, fullrange = FALSE, aes(colour="A")) +
+  geom_smooth(data = subset(silverstoneQualNoRain, year %in% c(2015:2017)), method = "lm", se = F, fullrange = FALSE, aes(colour="B")) +
+  scale_colour_manual(name="Engine Type", labels = c("2.4 litre V8", "1.6 litre V6 turbo"), values=c("blue", "red"))
+```
+
+# Data Analysis: Fastest Track Times (British Grand Prix: Silverstone)
+
+From our graph produced for the British Grand Prix, we can observe the following:
+
+1. Similar to the previous two tracks, the qualifying rounds with rain were shown to be outliers, so they were exluded in our linear model (2012, 2014). Note in 2014, the track was "damp" but still hindered much of the qualifying speed as drivers must still take precautions in order to stay on track.
+
+2. There is an interesting gap between 2006-2009 and 2010-2013, this can be explained by a shift in track layout at the Silverstone circuit, hence, the graphing of the linear model has taken that into account and grouped those years separately instead of being one entity (subgrouping).
+
+3. During the 2.4 litre V8 engine era (2006-2012), there is a miniscule decrease in qualifying times in both different layouts of the track. We can conclude that qualifying times were stagnant and not increasing nor decreasing during this time. Hence, overall qualifying speed was about the same in the old and new tracks.
+
+3. During the 1.6 litre V6 turbo era (2015-2017), there is a huge decrease in time similar to the two tracks modeled previously. This can support answer our question that in this current era, qualifying times are decreasing and race cars are improving in terms of speed.
+
+# Summary
+
+In this analysis report, I set out to determine whether Formula One race cars were getting faster with the improvement of technology over the last decade. Through observing qualifying times, which were deemed to be fastest times during any point of the race, and subjectively choosing the top 3 tracks in terms of speed, I produced graphs comparing the qualifying times as well as explaining the different eras of engine requirement which diverted my data into numerous subgroups. Overall, it was seen that the 2.4 litre V8 engines were relatively non-improving while the newer 1.6 litre V6 turbo engines were consistently improving each year. With the pace that is observed with my data, Formula One technology is at a rate of rapid improvement.
+
+Some limitations to my research would be I only chose the fastest 3 tracks as opposed to observing the whole F1 calendar (21 tracks as of 2019 season). There could be evidence contrary to my findings and we would have to dive deeper into the data to find correlations. Furthermore, there is almost an endless amount of data to observe, one example could be to differ in eras researched as Formula One started in 1950. Another improvement of my work could also to observe actual race times instead of just qualifying laps because observing race times promotes consistency over just going fast on one lap.
+
+<center><img src="https://www.wsupercars.com/wallpapers/Formula_1/Mercedes/2019-Formula1-Mercedes-AMG-F1-W10-V5-1080.jpg"></center>

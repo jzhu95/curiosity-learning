@@ -5,3 +5,5 @@ Just some messing around with Formula One dataset found on Kaggle through the 20
 Very large dataset to manipulate especially with numerous joins from different spreadsheets.
 
 Included some simple yet effective analysis to see whether drivers/cars were getting "faster".
+
+Please note all code and comments were done in Rstudios, for best visuals, please download the file and run to produce the html file.

@@ -1,5 +1,5 @@
 ---
-title: "DATA 2401 R Final Project - Formula One (F1) Analysis"
+title: "Formula One (F1) Analysis"
 author: "Jake Zhu"
 date: "12/09/2019"
 output: 
